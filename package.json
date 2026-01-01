@@ -1,0 +1,20 @@
+{
+  "name": "markdown-laconism",
+  "displayName": "Markdown Laconism",
+  "description": "Auto-convert .webm image tags to video tags in Markdown preview",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "markdown.markdownItPlugins": true
+  }
+}
