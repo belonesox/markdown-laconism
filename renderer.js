@@ -1,8 +1,10 @@
 const vscode = require('vscode');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = function(md, outputChannel) {
 
-    // Функция логгирования, проверяющая настройку
+    // Логгер
     function log(msg) {
         if (!outputChannel) return;
         
@@ -39,7 +41,72 @@ module.exports = function(md, outputChannel) {
         if (srcIndex >= 0) {
             let src = token.attrs[srcIndex][1];
             
-            // --- ЛОГИКА ИЗВЛЕЧЕНИЯ ALT ---
+            // =========================================================
+            // 1. MARKDOWN INCLUDE (![](./file.md))
+            // =========================================================
+            if (src.toLowerCase().trim().endsWith('.md')) {
+                log(`[INCLUDE DETECTED] Src: ${src}`);
+
+                // 1. Определяем базовый путь текущего документа
+                let currentDir = '';
+                
+                // VS Code передает путь к документу в env.currentDocument (обычно это URI)
+                if (env && env.currentDocument) {
+                    try {
+                        // env.currentDocument.fsPath работает если это объект URI
+                        // Если это строка, используем как есть
+                        const docPath = env.currentDocument.fsPath || env.currentDocument.path || env.currentDocument.toString();
+                        currentDir = path.dirname(docPath);
+                        log(`   -> Base Context: ${currentDir}`);
+                    } catch (e) {
+                        log(`   -> Error resolving base path: ${e.message}`);
+                    }
+                }
+
+                // Если не удалось через env, пробуем через workspace (менее надежно для ./ путей)
+                if (!currentDir && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                     currentDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                     log(`   -> Fallback to Workspace Root: ${currentDir}`);
+                }
+
+                // 2. Вычисляем абсолютный путь к включаемому файлу
+                let absolutePath = src;
+                if (!path.isAbsolute(src)) {
+                    // Если путь относительный, склеиваем с папкой текущего файла
+                    absolutePath = path.join(currentDir, src);
+                }
+
+                // 3. Читаем и рендерим
+                try {
+                    log(`   -> Reading file: ${absolutePath}`);
+                    if (fs.existsSync(absolutePath)) {
+                        const fileContent = fs.readFileSync(absolutePath, 'utf-8');
+                        
+                        // ВАЖНО: Рендерим контент рекурсивно!
+                        // Мы создаем новый env, чтобы не загрязнять текущий, 
+                        // но передаем текущий путь как базу для вложенных инклюдов.
+                        // (Хотя env.currentDocument в VS Code может переопределяться самим экстеншеном)
+                        
+                        // Добавляем класс-обертку, чтобы можно было стилизовать включенные куски
+                        return `<div class="markdown-included-doc" data-source="${src}">
+                                ${md.render(fileContent, env)}
+                                </div>`;
+                    } else {
+                        log(`   -> File not found: ${absolutePath}`);
+                        return `<p style="color:red; border:1px solid red; padding:5px;"><b>Error:</b> Included file not found: <code>${src}</code></p>`;
+                    }
+                } catch (e) {
+                    log(`   -> Read Error: ${e.message}`);
+                    return `<p style="color:red;"><b>Include Error:</b> ${e.message}</p>`;
+                }
+            }
+
+
+            // =========================================================
+            // 2. VIDEO PROCESSING (.webm)
+            // =========================================================
+            
+            // Сначала ALT и Размеры (для Видео и прочего)
             let alt = token.content || '';
             if (!alt && token.children && token.children.length > 0) {
                 alt = token.children.reduce((acc, child) => acc + (child.content || ''), '');
@@ -51,7 +118,7 @@ module.exports = function(md, outputChannel) {
             let height = token.attrGet('height');
             let title = token.attrGet('title') || '';
             
-            // 2. Fallback
+            // Fallback sizes
             if (!width && !height) {
                 const sizeInSrc = parseSizeFallback(src);
                 if (sizeInSrc) {
@@ -70,13 +137,9 @@ module.exports = function(md, outputChannel) {
 
             // --- WEBM -> VIDEO ---
             if (src.toLowerCase().trim().endsWith('.webm')) {
-                
-                // Если title пустой, используем alt
                 const finalTitle = (title && title.trim()) ? title : alt;
-
-                log(`[WEBM] ${src}`);
-                log(`   -> Size: ${width || 'auto'}x${height || 'auto'}`);
-                log(`   -> Title: "${finalTitle}"`);
+                
+                log(`[WEBM] ${src} (${width}x${height})`);
 
                 let style = 'max-width: 100%;'; 
                 if (width) style = `max-width: ${width}; width: ${width};`;

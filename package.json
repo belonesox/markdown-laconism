@@ -1,8 +1,8 @@
 {
   "name": "markdown-laconism",
   "displayName": "Markdown Laconism",
-  "description": "Video tag for .webm (compatible with imsize) and auto-links",
-  "version": "0.1.0",
+  "description": "Includes .md files via ![]. Video tag for .webm (compatible with imsize) and auto-links",
+  "version": "0.2.0",
   "license": "MIT",
   "author": "belonesox",
   "publisher": "belonesox",
