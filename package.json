@@ -1,20 +1,39 @@
 {
   "name": "markdown-laconism",
   "displayName": "Markdown Laconism",
-  "description": "Video tag for .webm and auto-links for ./ paths",
-  "version": "0.0.4",
-  "publisher": "local",
+  "description": "Video tag for .webm (compatible with imsize) and auto-links",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "belonesox",
+  "publisher": "belonesox",
+  "repository": {
+    "type": "git",
+    "url": "https://gitverse.ru/belonesox/markdown-lcaonism.git"
+  },
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
     "Other"
   ],
+  "extensionDependencies": [
+    "bierner.markdown-image-size"
+  ],
   "activationEvents": [
     "onLanguage:markdown"
   ],
   "main": "./extension.js",
   "contributes": {
-    "markdown.markdownItPlugins": true
+    "markdown.markdownItPlugins": true,
+    "configuration": {
+      "title": "Markdown Laconism",
+      "properties": {
+        "markdown-laconism.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose logging to the Output Channel."
+        }
+      }
+    }
   }
 }
