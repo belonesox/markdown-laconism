@@ -7,15 +7,17 @@ module.exports = function(md, outputChannel) {
     // Логгер
     function log(msg) {
         if (!outputChannel) return;
-        
-        // Читаем конфиг каждый раз, чтобы можно было включить лог без перезагрузки
+        // Для отладки читаем конфиг, но если что-то идет не так — пишем в консоль разработчика тоже
         const config = vscode.workspace.getConfiguration('markdown-laconism');
         if (config.get('debug')) {
             outputChannel.appendLine(msg);
         }
+        // console.log('[Laconism]' + msg); // Раскомментируйте, если Output пуст, и смотрите F12 -> Console
     }
 
-    // Fallback парсер размеров (если imsize не справился или отключен)
+    log('[Renderer] Initializing custom rules...');
+
+    // Fallback парсер размеров
     function parseSizeFallback(str) {
         if (!str) return null;
         let decoded = str;
@@ -29,7 +31,8 @@ module.exports = function(md, outputChannel) {
         return null;
     }
 
-    // Сохраняем предыдущий рендерер (обычно это image из плагина bierner)
+    // Сохраняем "предыдущий" рендер. 
+    // Если мы загрузились после Mermaid/Bierner, то "предыдущий" — это их рендер.
     const previousRender = md.renderer.rules.image || function(tokens, idx, options, env, self) {
         return self.renderToken(tokens, idx, options);
     };
@@ -40,74 +43,101 @@ module.exports = function(md, outputChannel) {
         
         if (srcIndex >= 0) {
             let src = token.attrs[srcIndex][1];
-            
-            // =========================================================
-            // 1. MARKDOWN INCLUDE (![](./file.md))
-            // =========================================================
-            if (src.toLowerCase().trim().endsWith('.md')) {
-                log(`[INCLUDE DETECTED] Src: ${src}`);
 
-                // 1. Определяем базовый путь текущего документа
+            // --- 1. EXTRACT ALT (Общее для всего) ---
+            let alt = token.content || '';
+            // Если контент пуст, пытаемся собрать его из children (если внутри ссылки была разметка)
+            if (!alt && token.children && token.children.length > 0) {
+                alt = token.children.reduce((acc, child) => acc + (child.content || ''), '');
+            }
+
+            // =========================================================
+            // 2. MARKDOWN INCLUDE (![](./file.md))
+            // =========================================================
+            // Декодируем src перед проверкой, чтобы %2Emd превратилось в .md
+            let decodedSrc = src;
+            try { decodedSrc = decodeURI(src); } catch(e) {}
+
+            if (decodedSrc.toLowerCase().trim().endsWith('.md')) {
+                log(`[INCLUDE START] ${decodedSrc}`);
+
+                // 2.1. Определяем текущую директорию (Контекст)
                 let currentDir = '';
                 
-                // VS Code передает путь к документу в env.currentDocument (обычно это URI)
+                // env.currentDocument — это URI текущего файла, который парсится прямо сейчас
                 if (env && env.currentDocument) {
                     try {
                         // env.currentDocument.fsPath работает если это объект URI
                         // Если это строка, используем как есть
                         const docPath = env.currentDocument.fsPath || env.currentDocument.path || env.currentDocument.toString();
                         currentDir = path.dirname(docPath);
-                        log(`   -> Base Context: ${currentDir}`);
+                        log(`   -> Context Dir: ${currentDir}`);
                     } catch (e) {
-                        log(`   -> Error resolving base path: ${e.message}`);
+                        log(`   -> Context Error: ${e.message}`);
                     }
                 }
-
-                // Если не удалось через env, пробуем через workspace (менее надежно для ./ путей)
+                
+                // Fallback, если env пустой (редко, но бывает)
                 if (!currentDir && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
                      currentDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
                      log(`   -> Fallback to Workspace Root: ${currentDir}`);
                 }
 
-                // 2. Вычисляем абсолютный путь к включаемому файлу
-                let absolutePath = src;
-                if (!path.isAbsolute(src)) {
-                    // Если путь относительный, склеиваем с папкой текущего файла
-                    absolutePath = path.join(currentDir, src);
+                // 2.2. Вычисляем абсолютный путь к файлу, который надо включить
+                let absolutePath = decodedSrc;
+                if (!path.isAbsolute(absolutePath)) {
+                    absolutePath = path.join(currentDir, absolutePath);
                 }
 
-                // 3. Читаем и рендерим
                 try {
-                    log(`   -> Reading file: ${absolutePath}`);
                     if (fs.existsSync(absolutePath)) {
                         const fileContent = fs.readFileSync(absolutePath, 'utf-8');
                         
-                        // ВАЖНО: Рендерим контент рекурсивно!
-                        // Мы создаем новый env, чтобы не загрязнять текущий, 
-                        // но передаем текущий путь как базу для вложенных инклюдов.
-                        // (Хотя env.currentDocument в VS Code может переопределяться самим экстеншеном)
-                        
-                        // Добавляем класс-обертку, чтобы можно было стилизовать включенные куски
-                        return `<div class="markdown-included-doc" data-source="${src}">
-                                ${md.render(fileContent, env)}
-                                </div>`;
+                        // 2.3. ПОДГОТОВКА РЕКУРСИВНОГО ОКРУЖЕНИЯ (Fix)
+                        // Мы создаем копию env, но подменяем currentDocument на путь к ВКЛЮЧАЕМОМУ файлу.
+                        // Теперь внутри md.render() все относительные пути будут считаться от него.
+                        const newEnv = Object.assign({}, env, {
+                            currentDocument: vscode.Uri.file(absolutePath)
+                        });
+
+                        log(`   -> Recursing into: ${absolutePath}`);
+                        const renderedContent = md.render(fileContent, newEnv);
+
+                        // --- Логика обертки ---
+                        if (alt && alt.trim().length > 0) {
+                            let openTag = '<div';
+                            if (alt.includes(':') || alt.includes(';')) {
+                                openTag += ` style="${md.utils.escapeHtml(alt)}" class="markdown-included-doc"`;
+                            } else {
+                                openTag += ` class="${md.utils.escapeHtml(alt)}"`;
+                            }
+                            // Добавляем data-source для отладки
+                            openTag += ` data-source="${md.utils.escapeHtml(src)}">`;
+                            
+                            // Добавляем \n, чтобы контент внутри не слипся с div
+                            return `${openTag}\n${renderedContent}\n</div>`;
+                        } else {
+                            // Если ALT пуст — возвращаем контент "как есть" (Inline Include)
+                            // Без div, без data-source (чтобы не мусорить в DOM)
+                            log(`   -> Inline include (no wrapper)`);
+                            return renderedContent;
+                        }
+
                     } else {
-                        log(`   -> File not found: ${absolutePath}`);
-                        return `<p style="color:red; border:1px solid red; padding:5px;"><b>Error:</b> Included file not found: <code>${src}</code></p>`;
+                        return `<div style="color:red; border:1px solid red; padding:5px;"><b>Error:</b> Included file not found: <code>${src}</code></div>`;
                     }
                 } catch (e) {
-                    log(`   -> Read Error: ${e.message}`);
-                    return `<p style="color:red;"><b>Include Error:</b> ${e.message}</p>`;
+                    log(`[Error] Read error: ${e.message}`);
+                    return `<div style="color:red;"><b>Include Error:</b> ${e.message}</div>`;
                 }
             }
-
 
             // =========================================================
             // 2. VIDEO PROCESSING (.webm)
             // =========================================================
             
             // Сначала ALT и Размеры (для Видео и прочего)
-            let alt = token.content || '';
+            alt = token.content || '';
             if (!alt && token.children && token.children.length > 0) {
                 alt = token.children.reduce((acc, child) => acc + (child.content || ''), '');
             }
@@ -156,6 +186,7 @@ module.exports = function(md, outputChannel) {
             }
         }
         
+        // Передаем управление дальше по цепочке
         return previousRender(tokens, idx, options, env, self);
     };
 

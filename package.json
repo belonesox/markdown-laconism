@@ -2,13 +2,13 @@
   "name": "markdown-laconism",
   "displayName": "Markdown Laconism",
   "description": "Includes .md files via ![]. Video tag for .webm (compatible with imsize) and auto-links",
-  "version": "0.2.0",
+  "version": "0.2.7",
   "license": "MIT",
   "author": "belonesox",
   "publisher": "belonesox",
   "repository": {
     "type": "git",
-    "url": "https://gitverse.ru/belonesox/markdown-lcaonism.git"
+    "url": "https://gitverse.ru/belonesox/markdown-laconism.git"
   },
   "engines": {
     "vscode": "^1.60.0"
@@ -17,7 +17,8 @@
     "Other"
   ],
   "extensionDependencies": [
-    "bierner.markdown-image-size"
+    "bierner.markdown-image-size",
+    "bierner.markdown-mermaid"
   ],
   "activationEvents": [
     "onLanguage:markdown"
@@ -30,7 +31,7 @@
       "properties": {
         "markdown-laconism.debug": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Enable verbose logging to the Output Channel."
         }
       }

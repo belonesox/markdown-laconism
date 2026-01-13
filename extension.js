@@ -7,11 +7,12 @@ function activate(context) {
     // Пишем стартовое сообщение, только если дебаг включен
     const config = vscode.workspace.getConfiguration('markdown-laconism');
     if (config.get('debug')) {
-        outputChannel.appendLine('[Main] Extension Activated v0.2.0');
+        outputChannel.appendLine('[Main] Extension Activated v0.2.1');
     }
 
     return {
         extendMarkdownIt(md) {
+            outputChannel.appendLine('[Main] VS Code requested markdown-it extension.');
             const plugin = require('./renderer');
             return plugin(md, outputChannel);
         }
