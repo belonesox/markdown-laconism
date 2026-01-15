@@ -1,14 +1,14 @@
 {
-  "name": "markdown-laconism",
+  "name": "markdown-laconicism",
   "displayName": "Markdown Laconism",
   "description": "Includes .md files via ![]. Video tag for .webm (compatible with imsize) and auto-links",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "license": "MIT",
   "author": "belonesox",
   "publisher": "belonesox",
   "repository": {
     "type": "git",
-    "url": "https://gitverse.ru/belonesox/markdown-laconism.git"
+    "url": "https://gitverse.ru/belonesox/markdown-laconicism.git"
   },
   "engines": {
     "vscode": "^1.60.0"

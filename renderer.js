@@ -59,9 +59,9 @@ module.exports = function(md, outputChannel) {
             try { decodedSrc = decodeURI(src); } catch(e) {}
 
             if (decodedSrc.toLowerCase().trim().endsWith('.md')) {
-                log(`[INCLUDE START] ${decodedSrc}`);
+                log(`[INCLUDE MATCH] ${decodedSrc}`);
 
-                // 2.1. Определяем текущую директорию (Контекст)
+                // 2.1. Определяем директорию ТЕКУЩЕГО документа (где мы сейчас находимся)
                 let currentDir = '';
                 
                 // env.currentDocument — это URI текущего файла, который парсится прямо сейчас
@@ -83,7 +83,11 @@ module.exports = function(md, outputChannel) {
                      log(`   -> Fallback to Workspace Root: ${currentDir}`);
                 }
 
-                // 2.2. Вычисляем абсолютный путь к файлу, который надо включить
+                // 2.2. Запоминаем Root (самый верхний файл), чтобы относительно него переписывать пути ассетов
+                // Если env.rootPath нет, значит мы на верхнем уровне — инициализируем его.
+                const rootPath = env.rootPath || currentDir;
+
+                // 2.3. Абсолютный путь к ВКЛЮЧАЕМОМУ файлу
                 let absolutePath = decodedSrc;
                 if (!path.isAbsolute(absolutePath)) {
                     absolutePath = path.join(currentDir, absolutePath);
@@ -92,16 +96,59 @@ module.exports = function(md, outputChannel) {
                 try {
                     if (fs.existsSync(absolutePath)) {
                         const fileContent = fs.readFileSync(absolutePath, 'utf-8');
-                        
-                        // 2.3. ПОДГОТОВКА РЕКУРСИВНОГО ОКРУЖЕНИЯ (Fix)
-                        // Мы создаем копию env, но подменяем currentDocument на путь к ВКЛЮЧАЕМОМУ файлу.
-                        // Теперь внутри md.render() все относительные пути будут считаться от него.
+                        const includedFileDir = path.dirname(absolutePath);
+
+                        // 2.4. Создаем новый env для рекурсии
                         const newEnv = Object.assign({}, env, {
-                            currentDocument: vscode.Uri.file(absolutePath)
+                            currentDocument: vscode.Uri.file(absolutePath),
+                            rootPath: rootPath // Пробрасываем корень вниз
                         });
 
-                        log(`   -> Recursing into: ${absolutePath}`);
-                        const renderedContent = md.render(fileContent, newEnv);
+                        log(`   -> Reading: ${absolutePath}`);
+                        
+                        // 2.5. ПАРСИНГ И ИСПРАВЛЕНИЕ ПУТЕЙ (Fix)
+                        // Вместо простого md.render мы сначала парсим в токены
+                        const tokens = md.parse(fileContent, newEnv);
+
+                        // Пробегаем по токенам и ищем картинки
+                        tokens.forEach(t => {
+                            if (t.type === 'inline' && t.children) {
+                                t.children.forEach(child => {
+                                    if (child.type === 'image') {
+                                        const originalImgSrc = child.attrGet('src');
+                                        
+                                        // Если это НЕ md-инклюд (т.е. обычная картинка или видео)
+                                        // Нам нужно исправить путь, чтобы он был корректен относительно Root
+                                        if (originalImgSrc && !originalImgSrc.toLowerCase().endsWith('.md')) {
+                                            
+                                            // 1. Вычисляем абсолютный путь к картинке (относительно included файла)
+                                            let absImgPath = originalImgSrc;
+                                            try { absImgPath = decodeURI(originalImgSrc); } catch(e){}
+
+                                            if (!path.isAbsolute(absImgPath)) {
+                                                absImgPath = path.resolve(includedFileDir, absImgPath);
+                                            }
+
+                                            // 2. Вычисляем путь относительно ROOT документа
+                                            const relToRoot = path.relative(rootPath, absImgPath);
+                                            
+                                            // 3. Обновляем токен. 
+                                            // Важно: split(path.sep).join('/') нужен для Windows, чтобы пути были web-friendly
+                                            const normalizedPath = relToRoot.split(path.sep).join('/');
+                                            
+                                            log(`      Fixing asset path: ${originalImgSrc} -> ${normalizedPath}`);
+                                            child.attrSet('src', normalizedPath);
+                                        }
+                                        // Если это .md (вложенный инклюд), мы его НЕ трогаем.
+                                        // Путь останется относительно includedFileDir, и рекурсивный вызов (md.renderer.render)
+                                        // подхватит его корректно, так как мы передали newEnv с правильным currentDocument.
+                                    }
+                                });
+                            }
+                        });
+
+                        // 2.6. Рендерим исправленные токены
+                        const renderedContent = md.renderer.render(tokens, md.options, newEnv);
 
                         // --- Логика обертки ---
                         if (alt && alt.trim().length > 0) {
