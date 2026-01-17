@@ -71,20 +71,34 @@ module.exports = function(md, outputChannel) {
                         // Если это строка, используем как есть
                         const docPath = env.currentDocument.fsPath || env.currentDocument.path || env.currentDocument.toString();
                         currentDir = path.dirname(docPath);
-                        log(`   -> Context Dir: ${currentDir}`);
+                        log(`   -> Context (Env): ${currentDir}`);
                     } catch (e) {
-                        log(`   -> Context Error: ${e.message}`);
+                        log(`   -> Context Env Error: ${e.message}`);
+                    }
+                }
+
+                // Вариант Б: Fallback для Export (если env пуст), берем из активного редактора
+                if (!currentDir && vscode.window.activeTextEditor) {
+                    try {
+                        const activeDoc = vscode.window.activeTextEditor.document;
+                        if (activeDoc && activeDoc.uri) {
+                            // Проверяем, что мы экспортируем именно маркдаун, чтобы не взять левый путь
+                            // (хотя при экспорте активным обычно является именно нужный файл)
+                            currentDir = path.dirname(activeDoc.uri.fsPath);
+                            log(`   -> Context (ActiveEditor): ${currentDir}`);
+                        }
+                    } catch (e) {
+                         log(`   -> Context ActiveEditor Error: ${e.message}`);
                     }
                 }
                 
-                // Fallback, если env пустой (редко, но бывает)
+                // Вариант В: Совсем fallback (Workspace Root)
                 if (!currentDir && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
                      currentDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
-                     log(`   -> Fallback to Workspace Root: ${currentDir}`);
+                     log(`   -> Context (Workspace): ${currentDir}`);
                 }
 
-                // 2.2. Запоминаем Root (самый верхний файл), чтобы относительно него переписывать пути ассетов
-                // Если env.rootPath нет, значит мы на верхнем уровне — инициализируем его.
+                // Root path для пересчета относительных путей картинок
                 const rootPath = env.rootPath || currentDir;
 
                 // 2.3. Абсолютный путь к ВКЛЮЧАЕМОМУ файлу
@@ -98,10 +112,11 @@ module.exports = function(md, outputChannel) {
                         const fileContent = fs.readFileSync(absolutePath, 'utf-8');
                         const includedFileDir = path.dirname(absolutePath);
 
-                        // 2.4. Создаем новый env для рекурсии
-                        const newEnv = Object.assign({}, env, {
+                        // Создаем окружение для рекурсии
+                        // Если env был пустой (при экспорте), создаем хотя бы минимальный объект
+                        const newEnv = Object.assign({}, env || {}, {
                             currentDocument: vscode.Uri.file(absolutePath),
-                            rootPath: rootPath // Пробрасываем корень вниз
+                            rootPath: rootPath
                         });
 
                         log(`   -> Reading: ${absolutePath}`);
@@ -171,13 +186,15 @@ module.exports = function(md, outputChannel) {
                         }
 
                     } else {
+                        log(`   -> ERROR: Included file not found at ${absolutePath}`);
                         return `<div style="color:red; border:1px solid red; padding:5px;"><b>Error:</b> Included file not found: <code>${src}</code></div>`;
                     }
                 } catch (e) {
-                    log(`[Error] Read error: ${e.message}`);
+                    log(`   -> Exception: ${e.message}`);
                     return `<div style="color:red;"><b>Include Error:</b> ${e.message}</div>`;
                 }
             }
+
 
             // =========================================================
             // 2. VIDEO PROCESSING (.webm)
