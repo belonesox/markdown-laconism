@@ -4,10 +4,10 @@ const vscode = require('vscode');
 const outputChannel = vscode.window.createOutputChannel("Markdown Laconism");
 
 function activate(context) {
-    // Пишем стартовое сообщение, только если дебаг включен
     const config = vscode.workspace.getConfiguration('markdown-laconism');
     if (config.get('debug')) {
-        outputChannel.appendLine('[Main] Extension Activated v0.2.1');
+        const version = context.extension.packageJSON.version;
+        outputChannel.appendLine(`[Main] Extension Activated v${version}`);
     }
 
     return {

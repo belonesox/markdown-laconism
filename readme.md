@@ -1,38 +1,40 @@
-Markdown стал доминирующей плоской разметкой, с нулевой кривой входа, известной всем околоайтишникам и ИИ, и по сути похоронил массовое использование 
-`SGML`/`[X]HTML`/`Dita`/`LaTeX`/`AsciiDoc`/`RST`/`[Media]Wiki` и прочих, возможно более умных разметок.
+Conveniences for brevity in Markdown - transclusions, video inclusions, hyperlinks to other documents in the code.
 
-Может это и к лучшему, поддержка Markdown в code-server, с LaTeX-формулами-графами и кучей других возможностей позволяет эффективно делать и техдокументацию и обучающие материалы, не заморачиваясь с проблемами страничной «версткой книг», и не используя монструозные решения типа `pandoc`.
+---
 
-Особенно, учитывая что в markdown можно вставлять практически произвольные блоки HTML-кода, если нужно что-то особое, интерактивное или визуальное.
+Markdown has become the dominant plain-text markup language. With a zero learning curve, it's familiar to almost everyone in IT and AI, essentially burying the widespread use of `SGML`, `[X]HTML`, `Dita`, `LaTeX`, `AsciiDoc`, `RST`, `[Media]Wiki`, and other, perhaps smarter, markup languages.
 
-Но некоторые вещи в markdown можно улучшить «не отходя от кассы» 
-- не изобретая новых расширений (pandoc-подход)
-- не добавляя новых элементов разметки
-- а расширяя идеи, уже заложенные в markdown, позволяя той же разметкой делать что-то компактней и лучше.
+Perhaps this is for the best. Markdown support in code-server (along with LaTeX math, graphs, and a host of other features) allows you to efficiently create technical documentation and educational materials without worrying about the complexities of book pagination or relying on monstrous solutions like `pandoc`.
 
+This is especially true considering you can insert almost arbitrary HTML blocks into Markdown whenever you need something specific, interactive, or visual.
 
-Например, в образовательных материалах и технической документации полезно вставлять маленькие иллюстрирующие медиаролики — как картинки, только живые, из мира Гарри Потера.
+However, some things in Markdown can be improved right out of the box:
+- Without inventing new extensions (the pandoc approach).
+- Without adding new markup elements.
+- By expanding the ideas already inherent in Markdown, allowing you to achieve more compact and effective results using the same syntax.
 
-Но классический подход с `<div><video …>…</video>` тегами очень монструозен, ведь таких картинок может быть много.
+For example, in educational materials and technical documentation, it's incredibly useful to insert small, illustrative media clips—like pictures, but alive, straight out of the Harry Potter world.
 
-Мы расширяем функциональность «включения» c учетом markdown расширения `image size`
-что можно включать не только картинки
-`![ALT]`&#8203;`(путь-к-картинке.png =ШиринаxВысота)`
-но и видео `![класс и стили]`&#8203;`(путь-к-видео.webm =ШиринаxВысота)`
+The classic approach using `<div><video …>…</video>` tags is extremely bulky, especially when your document contains many of these «living pictures.»
 
-Также больным местом является трансклюзия других markdown-документов — то что есть во всех практически остальных разметках  (LaTeX/SGML Docbook/MediaWiki/RST/…) тут из коробки нет.
+We extend the «inclusion» functionality, seamlessly integrating with the `markdown-image-size` extension semantics, so you can include not only images:
+`![ALT]`&#8203;`(path-to-image.png =WidthxHeight)`
+but also videos:
+`![classes and styles]`&#8203;`(path-to-video.webm =WidthxHeight)`
 
-Такую же «трансклюзию», мы тоже получаем, расширяя семантику «включения»
-`![класс и стили]`&#8203;`(путь-к-markdown-документу.md)`
-- Причем если указывать абсолютный путь, мы получим включение относительно папки проекта `${workspaceFolder}`
+Another major pain point is the **transclusion** of other Markdown documents. This feature is available out of the box in almost all other major markup languages (LaTeX, SGML Docbook, MediaWiki, RST, etc.), but is missing here.
 
+We achieve this «transclusion» by expanding the inclusion semantics once again:
+`![classes and styles]`&#8203;`(path-to-markdown-document.md)`
+- *Note:* If you specify an absolute path, the inclusion will be resolved relative to your project workspace folder (`${workspaceFolder}`).
 
-Еще частой необходимостью является автоматическая гиперлинковка на лежащие рядом markdown-документы и другие программные артефакты.
-Для этого, для «кодовых» литералов, начинающися с `./` типа 
-`./путь-к/какому-то/артефакту.py` — автоматически превращается в гиперссылку относительно текущего пути.
+Another frequent necessity is automatic hyperlinking to adjacent Markdown documents and other codebase artifacts.
+To solve this, inline code literals starting with `./`, such as:
+`./path-to/some/artifact.py`
+are automatically converted into hyperlinks relative to the current path.
 
-А если ссылка идет на markdown-документ, то ссылка типа
-`./путь-к/какому-то/артефакту.md` (которую уже можно сделать активной в самом документе с помощью других расширений vscode/code-server/code-oss), в HTML превращается в ссылку
-`./путь-к/какому-то/артефакту.html`, позволяя из набора markdown документов сделать связанную техническую документацию или базу знаний.
-
-
+Furthermore, if the link points to a Markdown document, a link like:
+`./path-to/some/artifact.md`
+(which can already be made clickable in the editor using other VS Code / code-server extensions) is converted into an HTML link:
+`./path-to/some/artifact.html`.
+This allows you to seamlessly turn a collection of standalone Markdown documents into interconnected technical documentation or a cohesive knowledge base.

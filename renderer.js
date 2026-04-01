@@ -185,11 +185,11 @@ module.exports = function(md, outputChannel) {
                         if (/^https?:/i.test(src)) {
                             return previousRender(tokens, idx, options, env, self);
                         }
-                        return `<div style="color:red; border:1px solid red; padding:5px;"><b>Error:</b> Included file not found: <code>${decodedSrc}</code></div>`;
+                        return `<div style="color: var(--vscode-errorForeground); border: 1px solid var(--vscode-errorForeground); padding: 8px; border-radius: 4px;"><strong>Markdown Laconism Error:</strong> Included file not found: <code>${md.utils.escapeHtml(decodedSrc)}</code></div>`;
                     }
                 } catch (e) {
                     log(`   -> Exception: ${e.message}`);
-                    return `<div style="color:red;"><b>Include Error:</b> ${e.message}</div>`;
+                    return `<div style="color: var(--vscode-errorForeground);"><strong>Markdown Laconism Include Error:</strong> ${md.utils.escapeHtml(e.message)}</div>`;                    
                 }
             }
 
@@ -230,8 +230,8 @@ module.exports = function(md, outputChannel) {
                 const safeAlt = md.utils.escapeHtml(alt);
 
                 return `<video src="${safeSrc}" loop controls autoplay muted crossorigin="anonymous" style="${style}" title="${safeTitle}" data-alt="${safeAlt}">
-                        Ваш браузер не поддерживает video тег.
-                        </video>`;
+                Your browser does not support the video tag.
+                </video>`;
             }
         }
         
