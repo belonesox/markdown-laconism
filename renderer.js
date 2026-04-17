@@ -194,6 +194,58 @@ module.exports = function(md, outputChannel) {
             }
 
             // =========================================================
+            // 3.5. QR-КОДЫ ДЛЯ ВНЕШНИХ HTML-ССЫЛОК
+            // =========================================================
+            if (/^https?:\/\/.+\.html?(\s*=.*)?$/i.test(decodedSrc)) {
+                
+                let width = token.attrGet('width');
+                let height = token.attrGet('height');
+                let title = token.attrGet('title') || '';
+                let cleanUrl = decodedSrc;
+
+                // Извлекаем размеры из синтаксиса img-size (=30%x)
+                if (!width && !height) {
+                    const sizeInSrc = parseSizeFallback(decodedSrc);
+                    if (sizeInSrc) {
+                        width = sizeInSrc.width;
+                        height = sizeInSrc.height;
+                        cleanUrl = sizeInSrc.cleanStr.trim();
+                    } else if (title) {
+                        const sizeInTitle = parseSizeFallback(title);
+                        if (sizeInTitle) {
+                            width = sizeInTitle.width;
+                            height = sizeInTitle.height;
+                            title = sizeInTitle.cleanStr;
+                        }
+                    }
+                }
+
+                // Еще раз проверяем очищенный URL, чтобы убедиться, 
+                // что после отрезания размеров это всё ещё html/htm
+                if (/^https?:\/\/.+\.html?$/i.test(cleanUrl)) {
+                    log(`[QR CODE] Generating for: ${cleanUrl}`);
+
+                    const safeUrl = md.utils.escapeHtml(cleanUrl);
+                    const safeAlt = md.utils.escapeHtml(alt || 'QR Code');
+                    const safeTitle = md.utils.escapeHtml(title || cleanUrl);
+
+                    // Используем публичный API (qzone=1 дает небольшую безопасную рамку вокруг кода)
+                    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&qzone=1&data=${encodeURIComponent(cleanUrl)}`;
+
+                    let style = 'max-width: 100%;';
+                    // Если img-size задал размеры, применяем их, иначе QR будет 512x512
+                    if (width) style += ` width: ${width};`;
+                    if (height) style += ` height: ${height};`;
+
+                    // Возвращаем картинку с QR, сразу обернутую в кликабельную ссылку на оригинал title="→ ${safeTitle}"
+                    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="cnig-qr-link">
+                                <img src="${qrApiUrl}" alt="${safeAlt}" style="${style}" class="markdown-laconism-qr" />
+                            </a>`;
+                }
+            }            
+
+
+            // =========================================================
             // 4. VIDEO PROCESSING (.webm)
             // =========================================================
             let width = token.attrGet('width');
