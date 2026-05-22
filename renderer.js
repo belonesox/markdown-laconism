@@ -15,6 +15,22 @@ module.exports = function(md, outputChannel) {
 
     log('[Renderer] Initializing custom rules...');
 
+    // =========================================================
+    // 0. РАЗРЕШАЕМ КАСТОМНЫЕ СХЕМЫ ССЫЛОК (diff://, find:// и т.д.)
+    // =========================================================
+    const originalValidateLink = md.validateLink;
+    md.validateLink = function (url) {
+        if (/^(diff|find):\/\//i.test(url)) return true;
+        return originalValidateLink(url);
+    };
+
+    // 0. ПРЕПРОЦЕССОР ДЛЯ РАЗМЕРОВ
+    md.core.ruler.before('normalize', 'imsize_preprocess', function (state) {
+        state.src = state.src.replace(/(!\[.*?\]\([^)\s"]+)\s+=([0-9.%a-zA-Z]+)?x([0-9.%a-zA-Z]+)?\)/g, function(match, prefix, w, h) {
+            return `${prefix}#imsize=${w || ''}x${h || ''})`;
+        });
+    });
+
     // Fallback парсер размеров
     function parseSizeFallback(str) {
         if (!str) return null;
@@ -40,10 +56,32 @@ module.exports = function(md, outputChannel) {
         if (srcIndex >= 0) {
             let src = token.attrs[srcIndex][1];
 
+                let width = token.attrGet('width');
+                let height = token.attrGet('height');
+                let title = token.attrGet('title') || '';
+
+                // Извлекаем размеры из хэша #imsize
+                const imsizeIndex = src.indexOf('#imsize=');
+                if (imsizeIndex >= 0) {
+                    const sizeStr = src.substring(imsizeIndex + 8);
+                    const [w, h] = sizeStr.split('x');
+                    width = w || width;
+                    height = h || height;
+                    src = src.substring(0, imsizeIndex);
+                    token.attrs[srcIndex][1] = src;
+                }
+
             // --- 1. EXTRACT ALT ---
             let alt = token.content || '';
             if (!alt && token.children && token.children.length > 0) {
                 alt = token.children.reduce((acc, child) => acc + (child.content || ''), '');
+            }
+
+            // ИЗВЛЕКАЕМ ШИРИНУ ИЗ ALT (синтаксис w50% или w200px)
+            const altWidthMatch = alt.match(/(?:^|[\s,])w(\d+(?:%|px|em|vw|vh)?)(?:$|[\s,])/);
+            if (altWidthMatch) {
+                width = altWidthMatch[1];
+                alt = alt.replace(altWidthMatch[0], ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
             }
 
             let decodedSrc = src;
@@ -248,9 +286,6 @@ module.exports = function(md, outputChannel) {
             // =========================================================
             // 4. VIDEO PROCESSING (.webm)
             // =========================================================
-            let width = token.attrGet('width');
-            let height = token.attrGet('height');
-            let title = token.attrGet('title') || '';
             
             if (!width && !height) {
                 const sizeInSrc = parseSizeFallback(src);
@@ -284,6 +319,18 @@ module.exports = function(md, outputChannel) {
                 return `<video src="${safeSrc}" loop controls autoplay muted crossorigin="anonymous" style="${style}" title="${safeTitle}" data-alt="${safeAlt}">
                 Your browser does not support the video tag.
                 </video>`;
+            }
+            
+            // =========================================================
+            // 5. РЕНДЕРИМ КАРТИНКУ С РАЗМЕРАМИ
+            // =========================================================
+            if (width || height) {
+                let imgStr = `<img src="${md.utils.escapeHtml(src)}" alt="${md.utils.escapeHtml(alt)}"`;
+                if (title) imgStr += ` title="${md.utils.escapeHtml(title)}"`;
+                if (width) imgStr += ` width="${md.utils.escapeHtml(width)}"`;
+                if (height) imgStr += ` height="${md.utils.escapeHtml(height)}"`;
+                imgStr += ' />';
+                return imgStr;
             }
         }
         
