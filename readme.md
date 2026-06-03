@@ -22,8 +22,12 @@ We extend the «inclusion» functionality, seamlessly integrating with the `mark
 but also videos:
 `![classes and styles]`&#8203;`(path-to-video.webm =WidthxHeight)`
 
+Also, you can specify width of included images, videos using syntax like `w20%` (width of `20%`) in alt block, like
+`![right,w20%]`&#8203;`(./someimage.png)` — this is more convenient, becase dont break stadard hyperlinking and "rename symbol" functionality.
+
 If we in image translusion tag we see URL ended with `.htm` or `.html`, we can conclude, that here should be image-link, that is QR-code. 
 - Or we should use it for `iframe`? Definitely iframes are rare, but QR-links may be frequently used in presentations. Exprerimental feature.
+- If you also force qrcoding for any URL using `qrcode` spec in ALT block, like `![right,qrcode,w20%]`&#8203;`(https://t.me/somebody)`
 
 Another major pain point is the **transclusion** of other Markdown documents. This feature is available out of the box in almost all other major markup languages (LaTeX, SGML Docbook, MediaWiki, RST, etc.), but is missing here.
 

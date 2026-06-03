@@ -84,6 +84,14 @@ module.exports = function(md, outputChannel) {
                 alt = alt.replace(altWidthMatch[0], ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
             }
 
+            // ИЗВЛЕКАЕМ ФЛАГ qrcode ИЗ ALT
+            let isExplicitQr = false;
+            const qrMatch = alt.match(/(?:^|[\s,])qrcode(?:$|[\s,])/i);
+            if (qrMatch) {
+                isExplicitQr = true;
+                alt = alt.replace(qrMatch[0], ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
+            }
+
             let decodedSrc = src;
             try { decodedSrc = decodeURI(src); } catch(e) {}
 
@@ -232,13 +240,10 @@ module.exports = function(md, outputChannel) {
             }
 
             // =========================================================
-            // 3.5. QR-КОДЫ ДЛЯ ВНЕШНИХ HTML-ССЫЛОК
+            // 3.5. QR-КОДЫ (Для .html ссылок или при наличии флага qrcode)
             // =========================================================
-            if (/^https?:\/\/.+\.html?(\s*=.*)?$/i.test(decodedSrc)) {
+            if (isExplicitQr || /^https?:\/\/.+\.html?(\s*=.*)?$/i.test(decodedSrc)) {
                 
-                let width = token.attrGet('width');
-                let height = token.attrGet('height');
-                let title = token.attrGet('title') || '';
                 let cleanUrl = decodedSrc;
 
                 // Извлекаем размеры из синтаксиса img-size (=30%x)
@@ -258,26 +263,35 @@ module.exports = function(md, outputChannel) {
                     }
                 }
 
-                // Еще раз проверяем очищенный URL, чтобы убедиться, 
-                // что после отрезания размеров это всё ещё html/htm
-                if (/^https?:\/\/.+\.html?$/i.test(cleanUrl)) {
-                    log(`[QR CODE] Generating for: ${cleanUrl}`);
+                // Проверяем: либо стоит флаг, либо это чистый html-урл
+                if (isExplicitQr || /^https?:\/\/.+\.html?$/i.test(cleanUrl)) {
+                    log(`[QR CODE] Generating locally for: ${cleanUrl}`);
 
                     const safeUrl = md.utils.escapeHtml(cleanUrl);
                     const safeAlt = md.utils.escapeHtml(alt || 'QR Code');
                     const safeTitle = md.utils.escapeHtml(title || cleanUrl);
 
-                    // Используем публичный API (qzone=1 дает небольшую безопасную рамку вокруг кода)
-                    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&qzone=1&data=${encodeURIComponent(cleanUrl)}`;
+                    // Генерируем локальный SVG
+                    const QRCode = require('qrcode-svg');
+                    const qr = new QRCode({
+                        content: cleanUrl,
+                        padding: 1, // минимальные поля
+                        width: 512,
+                        height: 512,
+                        color: "#000000",
+                        background: "#ffffff",
+                        ecl: "M" // Уровень коррекции ошибок (Medium)
+                    });
+                    
+                    // Упаковываем SVG в Data URI
+                    const qrDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(qr.svg())}`;
 
                     let style = 'max-width: 100%;';
-                    // Если img-size задал размеры, применяем их, иначе QR будет 512x512
                     if (width) style += ` width: ${width};`;
                     if (height) style += ` height: ${height};`;
 
-                    // Возвращаем картинку с QR, сразу обернутую в кликабельную ссылку на оригинал title="→ ${safeTitle}"
                     return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="cnig-qr-link">
-                                <img src="${qrApiUrl}" alt="${safeAlt}" style="${style}" class="markdown-laconism-qr" />
+                                <img src="${qrDataUri}" alt="${safeAlt}" style="${style}" class="markdown-laconism-qr" />
                             </a>`;
                 }
             }            

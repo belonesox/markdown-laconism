@@ -1,4 +1,7 @@
 *.vsix
-.olegcat
+.o*cat
 *.html
 .vscode 
+node_modules
+*.patch
+*.orig
