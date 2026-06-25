@@ -36,6 +36,10 @@
         ]
       }
     ],
+    "markdown.previewCommandLinks": [
+      "markdown-laconism.launch",
+      "markdown-laconism.find"
+    ],
     "configuration": {
       "title": "Markdown Laconism",
       "properties": {

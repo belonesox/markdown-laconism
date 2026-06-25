@@ -20,7 +20,7 @@ module.exports = function(md, outputChannel) {
     // =========================================================
     const originalValidateLink = md.validateLink;
     md.validateLink = function (url) {
-        if (/^(diff|find):\/\//i.test(url)) return true;
+        if (/^(diff|find|launch):\/\//i.test(url)) return true;
         return originalValidateLink(url);
     };
 
@@ -177,6 +177,7 @@ module.exports = function(md, outputChannel) {
                         // Создаем окружение для рекурсии
                         const newEnv = Object.assign({}, env || {}, {
                             currentDocument: vscode.Uri.file(absolutePath),
+                            topLevelDir: (env && env.topLevelDir) ? env.topLevelDir : currentDir,
                             rootPath: rootPath
                         });
 
@@ -198,10 +199,11 @@ module.exports = function(md, outputChannel) {
                                                 absImgPath = path.resolve(includedFileDir, absImgPath);
                                             }
 
-                                            // Путь относительно ROOT документа
-                                            const relToRoot = path.relative(rootPath, absImgPath);
-                                            const normalizedPath = relToRoot.split(path.sep).join('/');
-                                            child.attrSet('src', normalizedPath);
+                                        // Путь относительно ГЛАВНОГО хост-документа (top level preview)
+                                        const relToHost = path.relative(newEnv.topLevelDir, absImgPath);
+                                            const normalizedPath = relToHost.split(path.sep).join('/');
+                                            const finalPath = (normalizedPath.startsWith('.') || normalizedPath.startsWith('/')) ? normalizedPath : './' + normalizedPath;
+                                            child.attrSet('src', finalPath);
                                         }
                                     }
                                 });
@@ -371,6 +373,35 @@ module.exports = function(md, outputChannel) {
             return `<code><a href="${href}" class='cnig-filelink'>${linkText}</a></code>`;
         }
         return defaultCodeInline(tokens, idx, options, env, self);
+    };
+
+    // =========================================================
+    // 6. УМНЫЕ ССЫЛКИ (find:// и launch://) -> command: URI
+    // =========================================================
+    const defaultLinkOpen = md.renderer.rules.link_open || function(tokens, idx, options, env, self) {
+        return self.renderToken(tokens, idx, options);
+    };
+
+    md.renderer.rules.link_open = function(tokens, idx, options, env, self) {
+        const token = tokens[idx];
+        const hrefIndex = token.attrIndex('href');
+        if (hrefIndex >= 0) {
+            let href = token.attrs[hrefIndex][1];
+            
+            if (href.startsWith('launch://')) {
+                const scenario = href.replace('launch://', '');
+                const args = encodeURIComponent(JSON.stringify([scenario]));
+                token.attrs[hrefIndex][1] = `command:markdown-laconism.launch?${args}`;
+            } else if (href.startsWith('find://')) {
+                let glob = href.replace('find://', '');
+                let regex = '';
+                const hashIdx = glob.indexOf('#');
+                if (hashIdx >= 0) { regex = glob.substring(hashIdx + 1); glob = glob.substring(0, hashIdx); }
+                const args = encodeURIComponent(JSON.stringify([glob, regex]));
+                token.attrs[hrefIndex][1] = `command:markdown-laconism.find?${args}`;
+            }
+        }
+        return defaultLinkOpen(tokens, idx, options, env, self);
     };
 
     return md;

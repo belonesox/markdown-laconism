@@ -43,6 +43,41 @@ function activate(context) {
             })
         );
 
+    // Регистрируем команды для умных ссылок find:// и launch://
+    context.subscriptions.push(
+        vscode.commands.registerCommand('markdown-laconism.launch', async (scenario) => {
+            const folder = vscode.workspace.workspaceFolders?.[0];
+            if (folder) {
+                vscode.debug.startDebugging(folder, scenario);
+            } else {
+                vscode.window.showErrorMessage("Нет открытого workspace для отладки.");
+            }
+        }),
+        vscode.commands.registerCommand('markdown-laconism.find', async (glob, regexStr) => {
+            const files = await vscode.workspace.findFiles(glob, null, 1);
+            if (files.length > 0) {
+                const doc = await vscode.workspace.openTextDocument(files[0]);
+                const editor = await vscode.window.showTextDocument(doc);
+                if (regexStr) {
+                    try {
+                        const re = new RegExp(regexStr, 'm');
+                        const match = re.exec(doc.getText());
+                        if (match) {
+                            const startPos = doc.positionAt(match.index);
+                            const endPos = doc.positionAt(match.index + match[0].length);
+                            editor.selection = new vscode.Selection(startPos, endPos);
+                            editor.revealRange(new vscode.Range(startPos, endPos), vscode.TextEditorRevealType.InCenter);
+                        }
+                    } catch (e) {
+                        console.error("Laconism regex error:", e);
+                    }
+                }
+            } else {
+                vscode.window.showWarningMessage(`Файл ${glob} не найден`);
+            }
+        })
+    );
+
     return {
         extendMarkdownIt(md) {
             outputChannel.appendLine('[Main] VS Code requested markdown-it extension.');
