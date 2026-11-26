@@ -1,0 +1,26 @@
+**
+!package.json
+!readme.md
+!readme-ru.md
+!LICENSE
+!media/icon.png
+!extension.js
+!renderer.js
+!image-alt.js
+!notebook-renderer.js
+!file-preview.js
+!text-include.js
+!include-options.js
+!table-data.js
+
+# Use the bundled XLSX reader and CSV parser.
+!node_modules/exceljs/dist/exceljs.bare.min.js
+!node_modules/csv-parse/dist/cjs/index.cjs
+!node_modules/csv-parse/package.json
+!node_modules/ssf/ssf.js
+!node_modules/ssf/package.json
+!node_modules/frac/frac.js
+!node_modules/frac/package.json
+!node_modules/qrcode-svg/package.json
+!node_modules/qrcode-svg/lib/**
+!node_modules/**/{LICENSE,LICENSE.*,LICENCE,LICENSE-*,license,license.md,COPYING,NOTICE,NOTICE.*}

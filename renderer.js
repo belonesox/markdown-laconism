@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
+const imageAlt = require('./image-alt');
 
 module.exports = function(md, outputChannel) {
 
@@ -72,10 +73,7 @@ module.exports = function(md, outputChannel) {
                 }
 
             // --- 1. EXTRACT ALT ---
-            let alt = token.content || '';
-            if (!alt && token.children && token.children.length > 0) {
-                alt = token.children.reduce((acc, child) => acc + (child.content || ''), '');
-            }
+            let alt = imageAlt(token);
 
             // ИЗВЛЕКАЕМ ШИРИНУ ИЗ ALT (синтаксис w50% или w200px)
             const altWidthMatch = alt.match(/(?:^|[\s,])w(\d+(?:%|px|em|vw|vh)?)(?:$|[\s,])/);
@@ -94,6 +92,12 @@ module.exports = function(md, outputChannel) {
 
             let decodedSrc = src;
             try { decodedSrc = decodeURI(src); } catch(e) {}
+
+            // VS Code preserves the author's path when it rewrites an image URL for the webview.
+            const originalSrc = token.attrGet('data-src');
+            if (originalSrc && /\.md$/i.test(originalSrc) && !/^(?:[a-z][\w+.-]*:|\/\/)/i.test(originalSrc)) {
+                try { decodedSrc = decodeURIComponent(originalSrc); } catch { decodedSrc = originalSrc; }
+            }
 
             // --- 2. FIX ДЛЯ REMOTE: Извлекаем реальный путь из URL ---
             // VS Code Remote подменяет локальные пути на ссылки vscode-resource.vscode-cdn.net
@@ -136,7 +140,7 @@ module.exports = function(md, outputChannel) {
                 }
                 
                 // 3.2. Определяем корень проекта (Workspace Root)
-                let workspaceRoot = env.rootPath;
+                let workspaceRoot = env.rootPath || (env.currentDocument && vscode.workspace.getWorkspaceFolder(env.currentDocument)?.uri.fsPath);
                 if (!workspaceRoot && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
                     workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
                 }
@@ -175,8 +179,10 @@ module.exports = function(md, outputChannel) {
                         const includedFileDir = path.dirname(absolutePath);
 
                         // Создаем окружение для рекурсии
+                        const localUri = vscode.Uri.file(absolutePath);
                         const newEnv = Object.assign({}, env || {}, {
-                            currentDocument: vscode.Uri.file(absolutePath),
+                            currentDocument: env.currentDocument?.scheme === 'vscode-remote'
+                                ? env.currentDocument.with({ path: localUri.path, query: '', fragment: '' }) : localUri,
                             topLevelDir: (env && env.topLevelDir) ? env.topLevelDir : currentDir,
                             rootPath: rootPath
                         });

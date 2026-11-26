@@ -5,6 +5,7 @@ const { execSync } = require('child_process');
 const outputChannel = vscode.window.createOutputChannel("Markdown Laconism");
 
 function activate(context) {
+    const installFileIncludes = require('./file-preview').createFilePreview(context);
     const config = vscode.workspace.getConfiguration('markdown-laconism');
     if (config.get('debug')) {
         const version = context.extension.packageJSON.version;
@@ -82,6 +83,7 @@ function activate(context) {
         extendMarkdownIt(md) {
             outputChannel.appendLine('[Main] VS Code requested markdown-it extension.');
             const plugin = require('./renderer');
+            installFileIncludes(md);
             return plugin(md, outputChannel);
         }
     };
