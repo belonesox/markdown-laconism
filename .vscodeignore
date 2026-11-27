@@ -5,12 +5,17 @@
 !LICENSE
 !media/icon.png
 !extension.js
+!commit-links.js
 !renderer.js
 !image-alt.js
 !notebook-renderer.js
 !file-preview.js
 !text-include.js
 !include-options.js
+!text-fragments.js
+!fragment-editor.js
+!node_modules/@lezer/*/dist/index.cjs
+!node_modules/@lezer/*/package.json
 !table-data.js
 
 # Use the bundled XLSX reader and CSV parser.

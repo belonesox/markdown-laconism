@@ -4,7 +4,8 @@ const crypto = require('crypto');
 const { Worker } = require('worker_threads');
 const vscode = require('vscode');
 const { parseOptions } = require('./table-data');
-const { isTextCandidate, textOptions, readText } = require('./text-include');
+const { isTextCandidate, textOptions, readText, selectText } = require('./text-include');
+const { localFragment, findFragment } = require('./text-fragments');
 const imageAlt = require('./image-alt');
 
 function stamp(file) {
@@ -25,6 +26,26 @@ function resolveSource(src, env) {
         ? path.join(root, source) : path.resolve(path.dirname(doc.fsPath), source);
     return { file, root };
 }
+
+function publishedPath(src, file, env) {
+    if (!env.topLevelDir || src.startsWith('/')) return src;
+    const relative = path.relative(env.topLevelDir, file).split(path.sep).map(encodeURIComponent).join('/');
+    return relative.startsWith('../') ? relative : './' + relative;
+}
+
+function dirtyDocument(file) {
+    return vscode.workspace.textDocuments.find(doc => doc.isDirty && doc.uri.fsPath === file);
+}
+
+function lineColumn(text, offset) {
+    const lines = text.slice(0, offset).split(/\r\n|[\r\n]/);
+    return lines.length + ',' + (lines[lines.length - 1].length + 1);
+}
+
+// Code 1.105 (including code-server) understands #Lline,column. Newer Markdown
+// previews also accept a range. Keep a working start position on older clients.
+const [codeMajor, codeMinor] = vscode.version.split('.').map(Number);
+const supportsPreviewRanges = codeMajor > 1 || codeMinor >= 140;
 
 function cellHtml(cell, tag, scope, escape) {
     let attrs = scope ? ` scope="${scope}"` : '';
@@ -111,8 +132,9 @@ function createFilePreview(context) {
         const stamps = new Map();
         for (const entry of entries.values()) {
             if (!stamps.has(entry.file)) stamps.set(entry.file, stamp(entry.file));
-            if (stamps.get(entry.file) !== entry.observed) {
-                entry.observed = stamps.get(entry.file);
+            const observed = entry.fragment ? stamps.get(entry.file) + '/' + (dirtyDocument(entry.file)?.version || 0) : stamps.get(entry.file);
+            if (observed !== entry.observed) {
+                entry.observed = observed;
                 refresh();
             }
         }
@@ -192,6 +214,34 @@ function createFilePreview(context) {
         return entry.text;
     }
 
+    function fragmentTarget(file, directive, refs) {
+        const key = JSON.stringify(['fragment', file, directive]);
+        refs.add(key);
+        const doc = dirtyDocument(file);
+        const signature = stamp(file) + '/' + (doc?.version || 0);
+        let entry = entries.get(key);
+        if (!entry || entry.stamp !== signature) {
+            entry = { file, fragment: true, stamp: signature, observed: signature };
+            entries.set(key, entry);
+            try {
+                const text = doc ? doc.getText() : readText(file);
+                if (text === null) throw Error('Text fragments require a text file.');
+                const match = findFragment(text, directive);
+                const start = lineColumn(text, match.start);
+                const end = lineColumn(text, match.end);
+                entry.target = {
+                    content: text.slice(match.start, match.end),
+                    location: '#L' + start + (supportsPreviewRanges ? '-L' + end : ''),
+                    ambiguous: match.ambiguous
+                };
+            } catch (error) {
+                entry.error = error;
+            }
+        }
+        if (entry.error) throw entry.error;
+        return entry.target;
+    }
+
     return function install(md) {
         md.core.ruler.after('inline', 'laconism_file_blocks', state => {
             const tokens = state.tokens;
@@ -203,20 +253,21 @@ function createFilePreview(context) {
                 const src = image.attrGet('src');
                 if (!src || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(src)) continue;
                 const alt = imageAlt(image);
-                if (/\.md$/i.test(src)) {
+                const fragment = localFragment(src);
+                if (!fragment && /\.md$/i.test(src)) {
                     // A standalone transcluded Markdown document already supplies its own blocks.
                     open.hidden = close.hidden = true;
-                } else if (/\.(csv|xlsx)$/i.test(src)) {
+                } else if (!fragment && /\.(csv|xlsx)$/i.test(src)) {
                     open.type = 'laconism_table';
                     open.tag = 'table';
                     open.nesting = 0;
                     open.hidden = false;
                     open.meta = { src, alt };
                     tokens.splice(i + 1, 2);
-                } else if (isTextCandidate(src, alt)) {
+                } else if (isTextCandidate(fragment?.src || src, alt) && !/\.(?:csv|xlsx|md)$/i.test(fragment?.src || '')) {
                     // Keep the image paragraph available for binary files and capture the
                     // source before nested Markdown adjusts image paths for the webview.
-                    open.meta = { ...open.meta, textInclude: { src, alt } };
+                    open.meta = { ...open.meta, textInclude: { src: fragment?.src || src, alt, fragment } };
                 }
             }
         });
@@ -233,6 +284,48 @@ function createFilePreview(context) {
                 return '<p role="alert">' + md.utils.escapeHtml(src + ' — ' + e.message) + '</p>\n';
             }
         };
+
+        const previousLink = md.renderer.rules.link_open || ((ts, i, o, e, self) => self.renderToken(ts, i, o));
+        md.renderer.rules.link_open = (ts, i, o, env, self) => {
+            const token = ts[i];
+            const href = token.attrGet('href') || '';
+            const fragment = localFragment(href);
+            const codePath = token.meta?.codePath;
+            if ((!fragment && !codePath) || !env?.laconismFiles) return previousLink(ts, i, o, env, self);
+            const copy = Object.assign(new token.constructor(token.type, token.tag, token.nesting), token, {
+                attrs: token.attrs.map(attr => attr.slice())
+            });
+            const pathPart = href.split(/[?#]/, 1)[0];
+            const suffix = href.slice(pathPart.length);
+            try {
+                // In a transcluded document both destinations are relative to the host.
+                const file = (fragment || env.topLevelDir) && resolveSource(pathPart, env).file;
+                const src = publishedPath(pathPart, file, env);
+                const published = codePath ? src.replace(/\.md$/i, '.html') : src;
+                copy.attrSet('href', published + suffix);
+                copy.attrSet('data-href', src + suffix);
+                if (fragment) {
+                    const target = fragmentTarget(file, fragment.directive, env.laconismFiles);
+                    copy.attrSet('data-href', src + target.location);
+                    if (target.ambiguous) copy.attrSet('title', 'Multiple matches — opens the first one.');
+                }
+            } catch (error) {
+                copy.attrSet('title', error.message);
+            }
+            // Isolate changes from the token cache and keep the rest of the renderer chain.
+            const original = ts[i];
+            ts[i] = copy;
+            try { return previousLink(ts, i, o, env, self); } finally { ts[i] = original; }
+        };
+
+        md.renderer.rules.laconism_source_open = (tokens, i) => {
+            const { href, ideHref, name, title } = tokens[i].meta;
+            const escape = md.utils.escapeHtml;
+            return '<div class="laconism-source-block"><div style="text-align:right;font-size:0.8em">' +
+                '<a href="' + escape(href) + '" data-href="' + escape(ideHref) + '" title="' + escape(title) + '">' +
+                escape(name) + ' ↗</a></div>\n';
+        };
+        md.renderer.rules.laconism_source_close = () => '</div>\n';
 
         function expandText(tokens, env) {
             const result = [];
@@ -251,7 +344,8 @@ function createFilePreview(context) {
                 try {
                     const { file } = resolveSource(include.src, env);
                     const options = textOptions(file, include.alt);
-                    const content = cachedText(file, options, env.laconismFiles);
+                    const target = include.fragment && fragmentTarget(file, include.fragment.directive, env.laconismFiles);
+                    const content = target ? selectText(() => [target.content], options) : cachedText(file, options, env.laconismFiles);
                     if (content === null) {
                         result.push(open);
                         continue;
@@ -259,6 +353,19 @@ function createFilePreview(context) {
                     block.markup = '```';
                     block.info = options.language;
                     block.content = content;
+                    if (options.sourceLink) {
+                        const src = publishedPath(include.src, file, env);
+                        const wrapper = new open.constructor('laconism_source_open', 'div', 1);
+                        wrapper.meta = {
+                            name: decodeURI(include.src),
+                            href: src + (target ? '#:~:text=' + include.fragment.directive : ''),
+                            ideHref: src + (target?.location || ''),
+                            title: target?.ambiguous ? 'Open source (first of several matches)' : 'Open source'
+                        };
+                        result.push(wrapper, block, new open.constructor('laconism_source_close', 'div', -1));
+                        i += 2;
+                        continue;
+                    }
                 } catch (error) {
                     block.type = 'html_block';
                     block.content = '<p role="alert">' + md.utils.escapeHtml(include.src + ' — ' + error.message) + '</p>\n';
@@ -272,7 +379,7 @@ function createFilePreview(context) {
         const previous = md.renderer.render;
         md.renderer.render = function(tokens, options, env = {}) {
             const refs = env.laconismFiles || new Set();
-            const scope = { ...env, laconismFiles: refs };
+            const scope = { ...env, laconismFiles: refs, laconismGit: env.laconismGit || new Map() };
             const html = previous.call(this, expandText(tokens, scope), options, scope);
             if (env.laconismFiles) return html;
             const uri = env.currentDocument || vscode.window.activeTextEditor?.document.uri;

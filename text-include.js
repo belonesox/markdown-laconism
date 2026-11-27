@@ -29,13 +29,15 @@ function defaultLanguage(file) {
 }
 
 function textOptions(file, alt) {
-    const options = { language: defaultLanguage(file), rows: ':', cols: ':' };
+    const options = { language: defaultLanguage(file), rows: ':', cols: ':', sourceLink: true };
     // An ordinary image description has never been required to be an option list.
-    if (!/(?:^|,)\s*(?:type|rows|cols)\s*=/i.test(alt)) return options;
+    if (!/(?:^|,)\s*(?:type|rows|cols|source_link)\s*=/i.test(alt)) return options;
     for (const [name, value] of argumentsOf(alt, 'text')) {
         const key = name.toLowerCase();
         if (key === 'rows' || key === 'cols') {
             options[key] = selection(key, value);
+        } else if (key === 'source_link' && (value === '0' || value === '1')) {
+            options.sourceLink = value === '1';
         } else if (key === 'type' && value && /^[\w.+#-]+$/.test(value)) {
             options.language = value.toLowerCase() === 'text' ? '' : value;
         } else {
@@ -70,10 +72,10 @@ function* textChunks(fd) {
     }
 }
 
-function lineCount(fd) {
+function lineCount(chunks) {
     let endings = 0;
     let unterminated = false;
-    for (const chunk of textChunks(fd)) {
+    for (const chunk of chunks) {
         const separators = /\r\n|[\r\n]/g;
         while (separators.test(chunk)) endings++;
         unterminated = !/[\r\n]$/.test(chunk);
@@ -82,10 +84,10 @@ function lineCount(fd) {
 }
 
 // Only assemble lines needed for the excerpt. An omitted row can span many chunks.
-function* selectedLines(fd, positions) {
+function* selectedLines(chunks, positions) {
     let row = 0;
     let parts = [];
-    for (const chunk of textChunks(fd)) {
+    for (const chunk of chunks) {
         let start = 0;
         for (const match of chunk.matchAll(/\r\n|[\r\n]/g)) {
             if (!positions || positions.has(row)) {
@@ -108,29 +110,33 @@ function selectedColumns(line, cols) {
     return selectIndices(cols, chars.length, true).map(i => chars[i]).join('');
 }
 
+function selectText(chunks, { rows, cols }) {
+    if (rows === ':' && cols === ':') return [...chunks()].join('');
+
+    let positions;
+    if (rows !== ':') {
+        // Count and validate the whole source once, including bytes beyond the excerpt.
+        const indices = selectIndices(rows, lineCount(chunks()));
+        positions = new Map(indices.map((row, slot) => [row, slot]));
+        if (!positions.size) return '';
+    }
+    const output = [];
+    let remaining = positions?.size;
+    for (const [row, line, ending] of selectedLines(chunks(), positions)) {
+        const slot = positions ? positions.get(row) : output.length;
+        // A reordered unterminated final line needs a separator before its successor.
+        const separator = ending || (positions && slot + 1 < positions.size ? '\n' : '');
+        output[slot] = selectedColumns(line, cols) + separator;
+        if (positions && --remaining === 0) break;
+    }
+    return output.join('');
+}
+
 function readText(file, { rows = ':', cols = ':' } = {}) {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
     try {
         if (!fs.fstatSync(fd).isFile()) throw Error('Expected a regular file.');
-        if (rows === ':' && cols === ':') return [...textChunks(fd)].join('');
-
-        let positions;
-        if (rows !== ':') {
-            // Count and validate the whole source once, including bytes beyond the excerpt.
-            const indices = selectIndices(rows, lineCount(fd));
-            positions = new Map(indices.map((row, slot) => [row, slot]));
-            if (!positions.size) return '';
-        }
-        const output = [];
-        let remaining = positions?.size;
-        for (const [row, line, ending] of selectedLines(fd, positions)) {
-            const slot = positions ? positions.get(row) : output.length;
-            // A reordered unterminated final line needs a separator before its successor.
-            const separator = ending || (positions && slot + 1 < positions.size ? '\n' : '');
-            output[slot] = selectedColumns(line, cols) + separator;
-            if (positions && --remaining === 0) break;
-        }
-        return output.join('');
+        return selectText(() => textChunks(fd), { rows, cols });
     } catch (e) {
         if (e instanceof BinaryFile || e.code === 'ERR_ENCODING_INVALID_ENCODED_DATA') return null;
         throw e;
@@ -139,4 +145,4 @@ function readText(file, { rows = ':', cols = ':' } = {}) {
     }
 }
 
-module.exports = { isTextCandidate, textOptions, readText };
+module.exports = { isTextCandidate, textOptions, readText, selectText };

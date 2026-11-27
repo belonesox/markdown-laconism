@@ -1,54 +1,28 @@
-Conveniences for brevity in Markdown - transclusions, video inclusions, hyperlinks to other documents in the code.
+Markdown has become the dominant plain-text markup language. Almost everyone in IT and AI already knows it. Formats such as SGML, [X]HTML, DITA, LaTeX, AsciiDoc, reStructuredText and MediaWiki have largely given way to it in everyday documentation.
 
----
+Perhaps that's for the best. With Markdown in code-server, you can write technical documentation and teaching materials with LaTeX equations and diagrams without spending time on page layout or setting up a publishing toolchain such as Pandoc. When you need something interactive or visual, you can embed HTML directly.
 
-Markdown has become the dominant plain-text markup language. With a zero learning curve, it's familiar to almost everyone in IT and AI, essentially burying the widespread use of `SGML`, `[X]HTML`, `Dita`, `LaTeX`, `AsciiDoc`, `RST`, `[Media]Wiki`, and other, perhaps smarter, markup languages.
+Some everyday tasks could still be simpler. Markdown Laconism extends familiar Markdown syntax so that you can express more with the markup you already use.
 
-Perhaps this is for the best. Markdown support in code-server (along with LaTeX math, graphs, and a host of other features) allows you to efficiently create technical documentation and educational materials without worrying about the complexities of book pagination or relying on monstrous solutions like `pandoc`.
+#### Including video and Markdown documents
 
-This is especially true considering you can insert almost arbitrary HTML blocks into Markdown whenever you need something specific, interactive, or visual.
+Short video clips can illustrate a point in a tutorial as neatly as a picture, especially when the picture moves, Harry Potter style. Repeating `<div><video>…</video></div>` for every clip makes the Markdown cumbersome to read.
 
-However, some things in Markdown can be improved right out of the box:
-- Without inventing new extensions (the pandoc approach).
-- Without adding new markup elements.
-- By expanding the ideas already inherent in Markdown, allowing you to achieve more compact and effective results using the same syntax.
+The extension uses the same inclusion syntax for images and WebM videos, including the dimensions supported by `markdown-image-size`.
 
-For example, in educational materials and technical documentation, it's incredibly useful to insert small, illustrative media clips—like pictures, but alive, straight out of the Harry Potter world.
+<pre><code>!&#91;alt text](path/to/image.png =WidthxHeight)
 
-The classic approach using `<div><video …>…</video>` tags is extremely bulky, especially when your document contains many of these «living pictures.»
+!&#91;classes and styles](path/to/video.webm =WidthxHeight)</code></pre>
 
-We extend the «inclusion» functionality, seamlessly integrating with the `markdown-image-size` extension semantics, so you can include not only images:
-`![ALT]`&#8203;`(path-to-image.png =WidthxHeight)`
-but also videos:
-`![classes and styles]`&#8203;`(path-to-video.webm =WidthxHeight)`
+Including one document inside another (transclusion) is familiar from LaTeX, DocBook, MediaWiki and reStructuredText. It's useful in Markdown too, whether you want to reuse a section of prose, quote a few lines from a log or configuration file, or include a table that's easier to maintain in CSV or Excel.
 
-Also, you can specify width of included images, videos using syntax like `w20%` (width of `20%`) in alt block, like
-`![right,w20%]`&#8203;`(./someimage.png)` — this is more convenient, becase dont break stadard hyperlinking and "rename symbol" functionality.
+Use the same syntax to include another Markdown document. A path starting with `/` is resolved from the project workspace folder (`${workspaceFolder}`).
 
-If we in image translusion tag we see URL ended with `.htm` or `.html`, we can conclude, that here should be image-link, that is QR-code. 
-- Or we should use it for `iframe`? Definitely iframes are rare, but QR-links may be frequently used in presentations. Exprerimental feature.
-- If you also force qrcoding for any URL using `qrcode` spec in ALT block, like `![right,qrcode,w20%]`&#8203;`(https://t.me/somebody)`
+<pre><code>!&#91;classes and styles](path/to/document.md)</code></pre>
 
-Another major pain point is the **transclusion** of other Markdown documents. This feature is available out of the box in almost all other major markup languages (LaTeX, SGML Docbook, MediaWiki, RST, etc.), but is missing here.
+#### Including tables
 
-We achieve this «transclusion» by expanding the inclusion semantics once again:
-`![classes and styles]`&#8203;`(path-to-markdown-document.md)`
-- *Note:* If you specify an absolute path, the inclusion will be resolved relative to your project workspace folder (`${workspaceFolder}`).
-
-Another frequent necessity is automatic hyperlinking to adjacent Markdown documents and other codebase artifacts.
-To solve this, inline code literals starting with `./`, such as:
-`./path-to/some/artifact.py`
-are automatically converted into hyperlinks relative to the current path.
-
-Furthermore, if the link points to a Markdown document, a link like:
-`./path-to/some/artifact.md`
-(which can already be made clickable in the editor using other VS Code / code-server extensions) is converted into an HTML link:
-`./path-to/some/artifact.html`.
-This allows you to seamlessly turn a collection of standalone Markdown documents into interconnected technical documentation or a cohesive knowledge base.
-
-### Include a table in the Markdown preview
-
-Put a local CSV or XLSX image reference in its own paragraph. Paths are relative to the Markdown file containing the reference, including inside a transcluded document.
+Put a local CSV or XLSX reference in its own paragraph. The path is relative to the Markdown file containing the reference.
 
 <pre><code>!&#91;rows=0;-3:, cols=0;2:4, trans](./current-portfolio.csv)
 
@@ -56,15 +30,18 @@ Put a local CSV or XLSX image reference in its own paragraph. Paths are relative
 
 !&#91;sheet="Portfolio, EUR", rows=0:5, styles](./portfolio.xlsx)</code></pre>
 
-- `rows` and `cols` default to the full table. Indices start at zero, a slice excludes its end, and negative indices count from the end. Join selections with `;` to keep the specified order. Overlapping selections include each index once.
-- Source row zero supplies the column headings when selected. `header=none` treats it as data. `trans` exchanges rows and columns after selection, so the headings become row labels.
-- CSV uses UTF-8 and defaults to `sep=comma`. Other delimiters are `sep=semicolon`, `sep=tab` and `sep=dblquote`. The last one treats each double quote as a separator and disables CSV quoting.
-- XLSX uses the first sheet by default. Number and date formats apply to displayed values. Formulas use the result saved in the workbook. ⁇ marks a formula without a saved result. Add `styles` to include bold, italic, horizontal alignment and explicit RGB font and solid fill colors.
-- The preview loads uncached selections in the background and checks source timestamps while the Markdown document is open. Selections are cached under `.vscode/.cache/md-laconism/` when the workspace is writable.
+- `rows` and `cols` select rows and columns from the source table using Python-style slices. Indices start at zero, a slice excludes its end, and negative indices count from the end. Join selections with `;` to specify their order. Overlapping indices appear once.
+- If you select source row zero, its cells supply the column headings. Use `header=none` to treat that row as data.
+- `trans` swaps rows and columns after selection. In the first example, the field names appear on the left and the values from the last three records appear to their right.
+- CSV files use UTF-8. The default delimiter is `sep=comma`. You can also specify `sep=semicolon`, `sep=tab` or `sep=dblquote`.
+- For XLSX, the first worksheet is selected by default. Use `sheet` to select a worksheet by name.
+- Dates and numbers use the cell's display format. Formulas show the result saved in the workbook. A `⁇` marks a formula with no saved result.
+- Add `styles` to include bold, italic, horizontal alignment and explicit RGB colors for text and solid fills.
+- Saving a source file updates the preview. Table selections are cached in `.vscode/.cache/md-laconism/`. Add this directory to your project's `.gitignore`.
 
-### Include a text file as a code block
+### Including a text file as a code block
 
-Place the reference in its own paragraph. The preview reads the file relative to the Markdown document that contains it and preserves indentation, blank lines and literal Markdown. The same path rules apply inside an included Markdown document.
+Put the reference in its own paragraph. The path is relative to the Markdown file that contains it, including when that file is itself included in another document. The block preserves indentation, blank lines and literal Markdown characters.
 
 <pre><code>!&#91;](./example.txt)
 
@@ -76,14 +53,91 @@ Place the reference in its own paragraph. The preview reads the file relative to
 
 !&#91;type=text](./diagram.py)</code></pre>
 
-Common extensions select the language for a fenced code block. For example, <code>.py</code> selects Python and <code>.yml</code> selects YAML. Unknown extensions default to plain text. Common extensionless filenames such as Makefile and Dockerfile also select a language. Use <code>type=LANGUAGE</code> to choose the same renderer as a Markdown fence, including Mermaid diagrams, or <code>type=text</code> to turn highlighting off. UTF-8 and BOM-marked UTF-16 files are supported. Saving the source updates the open preview.
+The file extension usually determines the highlighting language, for example Python for `.py` and YAML for `.yml`. Recognized filenames such as `Makefile` and `Dockerfile` also select a language. Other files default to plain text. Set `type=LANGUAGE` to select the same renderer you would use for a fenced code block. For example, `type=mermaid` renders a diagram, and `type=text` displays even a Python file without highlighting. UTF-8 and BOM-marked UTF-16 files are supported.
 
-Use <code>rows</code> to quote lines and <code>cols</code> to select characters within each chosen line. Both use the table syntax. Indices start at zero, the end of a slice is exclusive, and negative indices count from the end. Separate selections with <code>;</code> to specify their order. Overlapping indices appear once.
+Use `rows` and `cols` to quote a small example from a large log or configuration file. The slice syntax is the same as for tables. Here, `rows` selects lines and `cols` selects characters within each selected line. Blank lines count. A final line ending adds no extra row. Columns count Unicode code points, with a tab occupying one position. Positions beyond the end of a short line are skipped. Highlighting applies to the resulting excerpt.
 
 <pre><code>!&#91;rows=10:15](./example.py)
 
 !&#91;type=text, rows=0;-3:, cols=8:](./server.log)</code></pre>
 
-The first example shows lines 11 through 15 with Python highlighting. The second shows the first line and the last three, starting at the ninth character of each. Blank lines count as rows. A final line ending adds no extra row. Columns count Unicode code points, including a tab as one character. Positions beyond a short line are skipped. Highlighting applies to the excerpt.
+The first example shows lines 11 through 15 with Python highlighting. The second shows the first line and the last three, starting at the ninth character of each.
 
-For Mermaid, enable one Markdown preview renderer. Use the built-in Mermaid support when available. In versions of VS Code or code-server without it, install <code>bierner.markdown-mermaid</code>.
+For Mermaid, enable one Markdown preview renderer. Use the built-in Mermaid support when available. In versions of VS Code or code-server without it, install `bierner.markdown-mermaid`.
+
+### Linking to nearby files and chapters
+
+To link to a file and show its path as the label, put the path in backticks and start it with `./`. To go up one directory, keep that prefix and start with `./../`.
+
+```markdown
+- Order submission — `./../logic/portfolio/neos_transport.py`
+- Building QUIK orders — `./../logic/portfolio/quik_orders.py`
+- Read more → `./03_markowitz.md`
+```
+
+In the preview, the first two links open Python files and the third opens the Markdown chapter. If you export each chapter to an HTML file alongside its Markdown source, for example with Freeze Markdown, the third link points to `./03_markowitz.html` in the exported overview. Readers can follow the same chapter reference in the IDE and on the published site.
+
+### Linking to a passage in source code and including it in the document
+
+An architecture overview can explain an idea in a few lines and link readers to the code or configuration that implements it. The link should take them to the relevant passage whether they're reading the Markdown source in VS Code or code-server, or browsing the published HTML. The extension uses the standard text fragment syntax for both links and includes. [Text fragments on MDN](https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment/Text_fragments)
+
+Append `#:~:text=start` to a path to select a phrase, or `#:~:text=start,end` to select a range including both terms. For example, an overview might link to the method that starts a calculation and quote the relevant part of its configuration.
+
+<pre><code>The calculation starts in the &#91;run_hist method](../logic/opt_algo.py#:~:text=def%20run_hist).
+
+The project configuration lists the bonds that can be traded.
+
+!&#91;](../logic/portfolio/config.py#:~:text=TRADABLE_BONDS,%7D)</code></pre>
+
+Put the include in its own paragraph. This block starts at `TRADABLE_BONDS` and ends at the next closing brace, `}` (encoded as `%7D`). The link at the upper right shows the full path from the include, `../logic/portfolio/config.py ↗`. Click it to open the same passage in the source. Use `source_link=0` to hide the link for an individual block.
+
+<pre><code>!&#91;source_link=0](../logic/portfolio/config.py#:~:text=TRADABLE_BONDS,%7D)</code></pre>
+
+When combined with a text fragment, `rows` and `cols` select within the matched passage. The source link still points to the range in the URL. For an include without `#:~:text=`, it opens the whole file.
+
+When publishing, configure the web server to serve source files as `text/plain; charset=utf-8` so the browser can display the file and highlight the requested passage.
+
+#### Choosing among repeated matches
+
+Matching ignores case and selects the first occurrence. To identify a particular occurrence, add the surrounding text as context. Context can touch the match or be separated from it by whitespace. The selection and the quoted block contain only the matched text.
+
+| URL fragment | Text selected |
+| --- | --- |
+| `#:~:text=foo-,bar` | `bar` immediately after `foo`. |
+| `#:~:text=foo,-bar` | `foo` immediately before `bar`. |
+| `#:~:text=prefix-,start,end,-suffix` | The range from `start` through `end`, with `prefix` on the left and `suffix` on the right. |
+
+Use one `text=` directive per link. Within search terms and context, encode a space as `%20`, a comma as `%2C`, an ampersand as `%26` and a hyphen as `%2D`. Keep the commas and hyphens that delimit the context as shown in the examples.
+
+### Linking to a Git commit with `diff://`
+
+To show which change introduced the behavior you're describing, use the commit hash in a Markdown link. This is useful in a code review or a write-up of completed work, including when the repository has no web interface or the commit is still local.
+
+This example points to a commit in the extension's own history.
+
+<pre><code>&#91;Changes to include tables and text files](diff://a24f042)</code></pre>
+
+In the Markdown editor, Ctrl+click the address `diff://a24f042` to open a read-only virtual document with diff highlighting. It shows the commit details, message and patch, with added and removed lines marked by `+` and `-`, as in `git show --color=never a24f042`.
+
+For your project, use a full hash or an unambiguous abbreviation from `git log --oneline`. For this local view, Git runs in the **first folder of the open workspace**, even if the Markdown document is in a different folder. The commit must be available in that repository's history. If no workspace folder is open or Git cannot find the commit, the virtual document shows an error message.
+
+#### The same commit in the preview and published HTML
+
+In the Markdown preview, clicking the link opens the commit page on the Git host. Freeze Markdown writes that web URL into the exported HTML, so readers need only a browser and access to the repository. The extension reads the local Git configuration when rendering. The commit must have been published to the selected repository for readers to view it there.
+
+To build the web link, the extension looks for a repository starting in the directory of the Markdown file containing the link. It checks the fetch URL of `origin` first, then the other remotes until it recognizes GitHub or GitLab in the host or remote name. For example, if `origin` points to a local directory and `upstream` points to GitLab, the link uses `upstream`. If Git can resolve a short hash locally, the URL uses the full hash. Otherwise it keeps the hash from the link.
+
+| Git remote URL | Commit page URL |
+| --- | --- |
+| `git@github.com:team/project.git` | `https://github.com/team/project/commit/{commit}` |
+| `ssh://git@gitlab.example.org:2222/team/subgroup/project.git` | `https://gitlab.example.org/team/subgroup/project/-/commit/{commit}` |
+
+For another Git host, an SSH alias or a particular mirror, set a template in the project's `.vscode/settings.json`. It takes precedence over remote detection. Use the full HTTP or HTTPS URL of a commit page and replace the hash with `{commit}`.
+
+```json
+{
+  "markdown-laconism.commitUrlTemplate": "https://git.example.org/team/project/changeset/{commit}"
+}
+```
+
+An empty setting enables automatic detection. If the extension cannot determine a web URL, the preview and export retain the `diff://` address. Set the template and export again to update links in previously generated HTML.

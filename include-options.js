@@ -2,7 +2,7 @@ function* argumentsOf(alt, kind) {
     let rest = alt.trim();
     while (rest) {
         // A quoted value can contain commas, e.g. sheet="Prices, EUR".
-        const match = /^([a-z]+)(?:\s*=\s*(?:"((?:[^"]|"")*)"|([^,"]+)))?\s*(,|$)/i.exec(rest);
+        const match = /^([a-z_]+)(?:\s*=\s*(?:"((?:[^"]|"")*)"|([^,"]+)))?\s*(,|$)/i.exec(rest);
         if (!match) throw Error(`Invalid ${kind} option: ${rest}`);
         const key = match[1];
         const value = match[2] !== undefined ? match[2].replace(/""/g, '"') : match[3]?.trim();

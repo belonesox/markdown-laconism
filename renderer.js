@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const imageAlt = require('./image-alt');
+const { commitWebUrl } = require('./commit-links');
 
 module.exports = function(md, outputChannel) {
 
@@ -362,24 +363,30 @@ module.exports = function(md, outputChannel) {
     // =========================================================
     // 5. ОБРАБОТКА ССЫЛОК (Code Inline ./path)
     // =========================================================
-    const defaultCodeInline = md.renderer.rules.code_inline || function(tokens, idx, options, env, self) {
-         return '<code' + self.renderAttrs(tokens[idx]) + '>' + 
-                md.utils.escapeHtml(tokens[idx].content) + 
-                '</code>';
-    };
-
-    md.renderer.rules.code_inline = function(tokens, idx, options, env, self) {
-        const rawContent = tokens[idx].content;
-        if (rawContent.startsWith('./')) {
-            let href = rawContent;
-            if (href.toLowerCase().endsWith('.md')) {
-                href = href.substring(0, href.length - 3) + '.html';
+    md.core.ruler.after('inline', 'laconism_code_paths', state => {
+        for (const inline of state.tokens) {
+            if (!inline.children?.some(token => token.type === 'code_inline' && token.content.startsWith('./'))) continue;
+            let inLink = false;
+            const children = [];
+            for (const token of inline.children) {
+                if (token.type === 'link_open') inLink = true;
+                if (token.type === 'link_close') inLink = false;
+                if (inLink || token.type !== 'code_inline' || !token.content.startsWith('./')) {
+                    children.push(token);
+                    continue;
+                }
+                const open = new state.Token('link_open', 'a', 1);
+                open.meta = { codePath: true };
+                open.attrSet('href', md.normalizeLink(token.content));
+                open.attrSet('class', 'cnig-filelink');
+                const close = new state.Token('link_close', 'a', -1);
+                open.level = close.level = token.level;
+                token.level++;
+                children.push(open, token, close);
             }
-            const linkText = md.utils.escapeHtml(rawContent);
-            return `<code><a href="${href}" class='cnig-filelink'>${linkText}</a></code>`;
+            inline.children = children;
         }
-        return defaultCodeInline(tokens, idx, options, env, self);
-    };
+    });
 
     // =========================================================
     // 6. УМНЫЕ ССЫЛКИ (find:// и launch://) -> command: URI
@@ -394,6 +401,26 @@ module.exports = function(md, outputChannel) {
         if (hrefIndex >= 0) {
             let href = token.attrs[hrefIndex][1];
             
+            const diff = /^diff:\/\/\/?([a-f0-9]{4,64})\/?$/i.exec(href);
+            if (diff) {
+                const doc = env?.currentDocument || vscode.window.activeTextEditor?.document.uri;
+                const cwd = doc?.fsPath ? path.dirname(doc.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                const template = vscode.workspace.getConfiguration('markdown-laconism', doc).get('commitUrlTemplate');
+                const web = commitWebUrl(cwd, diff[1], template, env?.laconismGit || new Map());
+                const attrs = token.attrs;
+                token.attrs = attrs.map(pair => pair.slice());
+                try {
+                    if (web) {
+                        token.attrSet('href', web);
+                        token.attrSet('data-href', web);
+                    } else {
+                        token.attrSet('title', 'Set markdown-laconism.commitUrlTemplate to link to this commit on the web.');
+                    }
+                    return defaultLinkOpen(tokens, idx, options, env, self);
+                } finally {
+                    token.attrs = attrs;
+                }
+            }
             if (href.startsWith('launch://')) {
                 const scenario = href.replace('launch://', '');
                 const args = encodeURIComponent(JSON.stringify([scenario]));

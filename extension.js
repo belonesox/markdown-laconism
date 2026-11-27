@@ -1,11 +1,17 @@
 const vscode = require('vscode');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 // Создаем канал вывода (он будет виден в списке Output)
 const outputChannel = vscode.window.createOutputChannel("Markdown Laconism");
 
 function activate(context) {
+    require('./fragment-editor').registerFragmentLinks(context);
     const installFileIncludes = require('./file-preview').createFilePreview(context);
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('markdown-laconism.commitUrlTemplate')) {
+            vscode.commands.executeCommand('markdown.preview.refresh');
+        }
+    }));
     const config = vscode.workspace.getConfiguration('markdown-laconism');
     if (config.get('debug')) {
         const version = context.extension.packageJSON.version;
@@ -23,7 +29,7 @@ function activate(context) {
                     if (!workspaceRoot) return 'Error: No workspace folder open.';
 
                     // Запускаем git show без встроенных цветов (VS Code подсветит сам)
-                    return execSync(`git show --color=never ${commitHash}`, {
+                    return execFileSync('git', ['show', '--color=never', '--end-of-options', commitHash, '--'], {
                         cwd: workspaceRoot,
                         encoding: 'utf-8'
                     });
